@@ -146,20 +146,20 @@ def get_user_simple_by_id(user_id):
         http_json_error(requests.codes['internal_server_error'], "db error")
     return user
 
+categories = [{'id': 1, 'parent_id': 0, 'category_name': 'ソファー'}, {'id': 2, 'parent_id': 1, 'category_name': '一人掛けソファー'}, {'id': 3, 'parent_id': 1, 'category_name': '二人掛 けソファー'}, {'id': 4, 'parent_id': 1, 'category_name': 'コーナーソファー'}, {'id': 5, 'parent_id': 1, 'category_name': '二段ソファー'}, {'id': 6, 'parent_id': 1, 'category_name': 'ソファーベッド'}, {'id': 10, 'parent_id': 0, 'category_name': '家庭用チェア'}, {'id': 11, 'parent_id': 10, 'category_name': 'スツール'}, {'id': 12, 'parent_id': 10, 'category_name': 'クッションスツール'}, {'id': 13, 'parent_id': 10, 'category_name': 'ダイニングチェア'}, {'id': 14, 'parent_id': 10, 'category_name': 'リビングチェア'}, {'id': 15, 'parent_id': 10, 'category_name': 'カウンターチェア'}, {'id': 20, 'parent_id': 0, 'category_name': 'キッズチェア'}, {'id': 21, 'parent_id': 20, 'category_name': '学習チェア'}, {'id': 22, 'parent_id': 20, 'category_name': 'ベビーソファ'}, {'id': 23, 'parent_id': 20, 'category_name': 'キッズハイチェア'}, {'id': 24, 'parent_id': 20, 'category_name': 'テーブルチェア'}, {'id': 30, 'parent_id': 0, 'category_name': 'オフィスチェア'}, {'id': 31, 'parent_id': 30, 'category_name': 'デスクチェア'}, {'id': 32, 'parent_id': 30, 'category_name': 'ビジネスチェア'}, {'id': 33, 'parent_id': 30, 'category_name': '回転チェア'}, {'id': 34, 'parent_id': 30, 'category_name': 'リクライニングチェア'}, {'id': 35, 'parent_id': 30, 'category_name': '投擲用椅子'}, {'id': 40, 'parent_id': 0, 'category_name': '折りたたみ椅子'}, {'id': 41, 'parent_id': 40, 'category_name': 'パイプ椅子'}, {'id': 42, 'parent_id': 40, 'category_name': '木製折りたたみ椅子'}, {'id': 43, 'parent_id': 40, 'category_name': 'キッチンチェア'}, {'id': 44, 'parent_id': 40, 'category_name': 'アウトドアチェア'}, {'id': 45, 'parent_id': 40, 'category_name': '作業椅子'}, {'id': 50, 'parent_id': 0, 'category_name': 'ベンチ'}, {'id': 51, 'parent_id': 50, 'category_name': '一人掛けベンチ'}, {'id': 52, 'parent_id': 50, 'category_name': ' 二人掛けベンチ'}, {'id': 53, 'parent_id': 50, 'category_name': 'アウトドア用ベンチ'}, {'id': 54, 'parent_id': 50, 'category_name': '収納付きベンチ'}, {'id': 55, 'parent_id': 50, 'category_name': '背もたれ付きベンチ'}, {'id': 56, 'parent_id': 50, 'category_name': 'ベンチマーク'}, {'id': 60, 'parent_id': 0, 'category_name': '座椅子'}, {'id': 61, 'parent_id': 60, 'category_name': '和風座椅 子'}, {'id': 62, 'parent_id': 60, 'category_name': '高座椅子'}, {'id': 63, 'parent_id': 60, 'category_name': 'ゲーミング座椅子'}, {'id': 64, 'parent_id': 60, 'category_name': 'ロッキングチェア'}, {'id': 65, 'parent_id': 60, 'category_name': '座布団'}, {'id': 66, 'parent_id': 60, 'category_name': '空気椅子'}]
+categories_id_map = {
+    category['id']: category for category in categories
+}
 
 def get_category_by_id(category_id):
-    conn = dbh()
-    sql = "SELECT * FROM `categories` WHERE `id` = %s"
-    with conn.cursor() as c:
-        c.execute(sql, (category_id,))
-        category = c.fetchone()
-        # TODO: check err
-    if category['parent_id'] != 0:
-        parent = get_category_by_id(category['parent_id'])
-        if parent is not None:
-            category['parent_category_name'] = parent['category_name']
-    return category
+    return categories_id_map[int(category_id)]
 
+def get_all_categories():
+    return categories
+
+def get_categories_by_root_category_id(root_category_id):
+    # TODO: 実装する
+    pass
 
 def to_user_json(user):
     del (user['hashed_password'], user['last_bump'], user['created_at'])
@@ -1249,15 +1249,7 @@ def get_settings():
         outputs['user'] = to_user_json(user)
     outputs['csrf_token'] = flask.session.get('csrf_token', '')
 
-    try:
-        conn = dbh()
-        sql = "SELECT * FROM `categories`"
-        with conn.cursor() as c:
-            c.execute(sql)
-            categories = c.fetchall()
-    except MySQLdb.Error as err:
-        app.logger.exception(err)
-        http_json_error(requests.codes['internal_server_error'], "db error")
+    categories = get_all_categories()
     outputs['categories'] = categories
     outputs['payment_service_url'] = get_payment_service_url()
 
