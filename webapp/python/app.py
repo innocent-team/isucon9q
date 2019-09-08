@@ -462,6 +462,16 @@ def get_new_category_items(root_category_id=None):
     ))
 
 
+async def async_ship_status(shipment_url, params, item_id)
+    res = requests.post(
+        shipment_url + "/status",
+        headers=dict(Authorization=Constants.ISUCARI_API_TOKEN, X-ITEM-ID=item_id),
+        json=params,
+    )
+    res.raise_for_status()
+    id=int(res.requests().headers["X-ITEM-ID"])
+    return (id, res)
+
 @app.route("/users/transactions.json", methods=["GET"])
 def get_transactions():
     user = get_user()
@@ -553,14 +563,21 @@ def get_transactions():
                 }
                 for item in c.fetchall()
             ]
+
+            job = []
             for i, item in enumerate(item_details):
                 transaction_evidence_id = item['transaction_evidence_id']
                 if transaction_evidence_id is not None:
                     if item['shipping_status'] is None:
                         http_json_error(requests.codes['not_found'], "shipping not found")
+                        params = {"reserve_id": item["shipping_reserve_id"]}
+                        jobs.push(async_ship_status(shipment_url, params, item['id']))
 
-                    ssr = api_shipment_status(get_shipment_service_url(), {"reserve_id": item["shipping_reserve_id"]})
-                    item["shipping_status"] = ssr["status"]
+            with asyncio.get_event_loop() as loop:
+                job_g = asyncio.gather(*job)
+                results = loop.run_until_complete()
+                for (i, ssr) in results:
+                    item_details[i]["shipping_status"] = ssr["status"]
 
             sql = """
             select * from `users`
