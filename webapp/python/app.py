@@ -66,7 +66,7 @@ class HttpException(Exception):
 def mem():
     if hasattr(flask.g, 'mem'):
         return flask.g.mem
-    flask.g.mem = MemClient(['127.0.0.1', 11211])
+    flask.g.mem = MemClient(('127.0.0.1', 11211))
     return flask.g.mem
 
 def dbh():
@@ -219,17 +219,18 @@ def ensure_valid_csrf_token():
 def get_config(name):
     cmem = mem()
     assert name == "payment_service_url" or name == "shipment_service_url"
-    return cmem.get(name)
+    return cmem.get(name).decode('utf-8')
 
 
 def get_payment_service_url():
     config = get_config("payment_service_url")
-    return Constants.DEFAULT_PAYMENT_SERVICE_URL if config is None else config['val']
+    app.logger.debug(config)
+    return Constants.DEFAULT_PAYMENT_SERVICE_URL if config is None else config
 
 
 def get_shipment_service_url():
     config = get_config("shipment_service_url")
-    return Constants.DEFAULT_SHIPMENT_SERVICE_URL if config is None else config['val']
+    return Constants.DEFAULT_SHIPMENT_SERVICE_URL if config is None else config
 
 
 def api_shipment_status(shipment_url, params={}):
@@ -281,8 +282,8 @@ def post_initialize():
             http_json_error(requests.codes['internal_server_error'], "db error")
 
     cmem = mem()
-    mem.set("payment_service_url", payment_service_url)
-    mem.set("shipment_service_url", shipment_service_url)
+    cmem.set("payment_service_url", payment_service_url)
+    cmem.set("shipment_service_url", shipment_service_url)
 
     return flask.jsonify({
         "campaign": 4,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
