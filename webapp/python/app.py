@@ -14,6 +14,8 @@ import bcrypt
 import pathlib
 import requests
 
+from pymemcache.client.base import Client as MemClient
+
 base_path = pathlib.Path(__file__).resolve().parent.parent
 static_folder = base_path / 'public'
 
@@ -61,6 +63,11 @@ class HttpException(Exception):
         response.status_code = self.status_code
         return response
 
+def mem():
+    if hasattr(flask.g, 'mem'):
+        return flask.g.mem
+    flask.g.mem = MemClient(['127.0.0.1', 11211])
+    return flask.g.mem
 
 def dbh():
     if hasattr(flask.g, 'db'):
@@ -210,12 +217,9 @@ def ensure_valid_csrf_token():
 
 
 def get_config(name):
-    conn = dbh()
-    sql = "SELECT * FROM `configs` WHERE `name` = %s"
-    with conn.cursor() as c:
-        c.execute(sql, (name,))
-        config = c.fetchone()
-    return config
+    cmem = mem()
+    assert name == "payment_service_url" or name == "shipment_service_url"
+    return cmem.get(name)
 
 
 def get_payment_service_url():
@@ -275,6 +279,10 @@ def post_initialize():
             conn.rollback()
             app.logger.exception(err)
             http_json_error(requests.codes['internal_server_error'], "db error")
+
+    cmem = mem()
+    mem.set("payment_service_url", payment_service_url)
+    mem.set("shipment_service_url", shipment_service_url)
 
     return flask.jsonify({
         "campaign": 4,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
