@@ -21,7 +21,6 @@ app = flask.Flask(__name__, static_folder=str(static_folder), static_url_path=''
 app.config['SECRET_KEY'] = 'isucari'
 app.config['UPLOAD_FOLDER'] = '../public/upload'
 
-
 class Constants(object):
     DEFAULT_PAYMENT_SERVICE_URL = "http://127.0.0.1:5555"
     DEFAULT_SHIPMENT_SERVICE_URL = "http://127.0.0.1:7000"
@@ -1360,4 +1359,6 @@ def get_index(*args, **kwargs):
 # @app.route("/*")
 
 if __name__ == "__main__":
+    from wsgi_lineprof.middleware import LineProfilerMiddleware
+    app = LineProfilerMiddleware(app)
     app.run(port=8000, debug=True, threaded=True)
