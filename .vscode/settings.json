@@ -1,0 +1,12 @@
+{
+    "python.pythonPath": "/home/isucon/local/python/bin/python",
+    "files.exclude": {
+      "public/upload": true,
+      "public/static": true,
+      "go": true,
+      "nodejs": true,
+      "perl": true,
+      "php": true,
+      "ruby": true,
+    },
+}

@@ -1,3 +1,4 @@
+  
 #!/usr/bin/env python
 
 import socket
@@ -20,6 +21,7 @@ static_folder = base_path / 'public'
 app = flask.Flask(__name__, static_folder=str(static_folder), static_url_path='')
 app.config['SECRET_KEY'] = 'isucari'
 app.config['UPLOAD_FOLDER'] = '../public/upload'
+
 
 class Constants(object):
     DEFAULT_PAYMENT_SERVICE_URL = "http://127.0.0.1:5555"
@@ -146,34 +148,20 @@ def get_user_simple_by_id(user_id):
         http_json_error(requests.codes['internal_server_error'], "db error")
     return user
 
-import category
-categories = category.categories
-categories_id_map = {
-    category['id']: category for category in categories
-}
 
 def get_category_by_id(category_id):
-    category = categories_id_map[int(category_id)]
+    conn = dbh()
+    sql = "SELECT * FROM `categories` WHERE `id` = %s"
+    with conn.cursor() as c:
+        c.execute(sql, (category_id,))
+        category = c.fetchone()
+        # TODO: check err
     if category['parent_id'] != 0:
         parent = get_category_by_id(category['parent_id'])
         if parent is not None:
             category['parent_category_name'] = parent['category_name']
     return category
 
-def get_all_categories():
-    return categories
-
-def get_categories_by_root_category_id(root_category_id):
-    """
-    sql = "SELECT id FROM `categories` WHERE parent_id=%s"
-    c.execute(sql, (
-        root_category_id,
-    ))
-    """
-    root_category_id = int(root_category_id)
-    ret = [x for x in categories if x['parent_id'] == root_category_id]
-    app.logger.debug(ret)
-    return ret
 
 def to_user_json(user):
     del (user['hashed_password'], user['last_bump'], user['created_at'])
@@ -277,7 +265,7 @@ def post_initialize():
             http_json_error(requests.codes['internal_server_error'], "db error")
 
     return flask.jsonify({
-        "campaign": 4,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
+        "campaign": 0,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
         "language": "python" # 実装言語を返す
     })
 
@@ -383,7 +371,16 @@ def get_new_category_items(root_category_id=None):
     category_ids = []
     with conn.cursor() as c:
         try:
-            category_ids = [x['id'] for x in get_categories_by_root_category_id(root_category_id)]
+            sql = "SELECT id FROM `categories` WHERE parent_id=%s"
+            c.execute(sql, (
+                root_category_id,
+            ))
+
+            while True:
+                category = c.fetchone()
+                if category is None:
+                    break
+                category_ids.append(category["id"])
 
             if item_id > 0 and created_at > 0:
                 sql = "SELECT * FROM `items` WHERE `status` IN (%s,%s) AND category_id IN ("+ ",".join(["%s"]*len(category_ids))+ ") AND (`created_at` < %s OR (`created_at` < %s AND `id` < %s)) ORDER BY `created_at` DESC, `id` DESC LIMIT %s"
@@ -1233,6 +1230,10 @@ def post_bump():
             sql = "UPDATE `users` SET `last_bump`=%s WHERE id=%s"
             c.execute(sql, (now, user['id'],))
 
+            sql = "SELECT * FROM `items` WHERE `id` = %s"
+            c.execute(sql, (target_item['id'],))
+            target_item = c.fetchone()
+
         conn.commit()
     except MySQLdb.Error as err:
         app.logger.exception(err)
@@ -1254,7 +1255,15 @@ def get_settings():
         outputs['user'] = to_user_json(user)
     outputs['csrf_token'] = flask.session.get('csrf_token', '')
 
-    categories = get_all_categories()
+    try:
+        conn = dbh()
+        sql = "SELECT * FROM `categories`"
+        with conn.cursor() as c:
+            c.execute(sql)
+            categories = c.fetchall()
+    except MySQLdb.Error as err:
+        app.logger.exception(err)
+        http_json_error(requests.codes['internal_server_error'], "db error")
     outputs['categories'] = categories
     outputs['payment_service_url'] = get_payment_service_url()
 
@@ -1350,17 +1359,6 @@ def get_index(*args, **kwargs):
 
 # Assets
 # @app.route("/*")
-from wsgi_lineprof.middleware import LineProfilerMiddleware
-from wsgi_lineprof.filters import FilenameFilter, TotalTimeSorter
-filters = [
-    # Results which filename contains "app.py"
-    FilenameFilter("/home/isucon/isucari/webapp/python/app.py"),
-    # Sort by total time of results
-    TotalTimeSorter(),
-]
-f = open("/home/isucon/isucari/webapp/python/lineprof.log", "w")
-# Add wsgi_lineprof as a WSGI middleware
-lapp = LineProfilerMiddleware(app, filters=filters, stream=f, async_stream=True)
 
 if __name__ == "__main__":
-    app.run(port=8000, debug=True, threaded=True)
+    app.run(port=9000, debug=True, threaded=True)
