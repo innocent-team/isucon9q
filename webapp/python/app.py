@@ -487,7 +487,22 @@ def get_transactions():
         try:
 
             if item_id > 0 and created_at > 0:
-                sql = "SELECT * FROM `items` WHERE (`seller_id` = %s OR `buyer_id` = %s) AND `status` IN (%s,%s,%s,%s,%s) AND (`created_at` < %s OR (`created_at` <= %s AND `id` < %s)) ORDER BY `created_at` DESC, `id` DESC LIMIT %s"
+                sql = """
+				SELECT
+                    `items`.*,
+                    `tevs`.`id` as `transaction_evidence_id`,
+                    `tevs`.`status` as `transaction_evidence_status`,
+                    `ss`.`status` as `shipping_status`,
+                    `ss`.`reserve_id` as `shipping_reserve_id`
+                FROM `items`
+                LEFT JOIN `transaction_evidences` `tevs`
+                ON `items`.`id` = `tevs`.`item_id`
+                LEFT JOIN `shippings` `ss`
+                ON `tevs`.`id` = `ss`.`transaction_evidence_id`
+				WHERE (`items`.`seller_id` = %s OR `items`.`buyer_id` = %s) AND `items`.`status` IN (%s,%s,%s,%s,%s)
+                AND (`items`.`created_at` < %s OR (`items`.`created_at` <= %s AND `items`.`id` < %s))
+                ORDER BY `items`.`created_at` DESC, `items`.`id` DESC LIMIT %s
+                """
                 c.execute(sql, (
                     user['id'],
                     user['id'],
@@ -503,7 +518,21 @@ def get_transactions():
                 ))
 
             else:
-                sql = "SELECT * FROM `items` WHERE (`seller_id` = %s OR `buyer_id` = %s ) AND `status` IN (%s,%s,%s,%s,%s) ORDER BY `created_at` DESC, `id` DESC LIMIT %s"
+                sql = """
+                SELECT
+                    `items`.*,
+                    `tevs`.`id` as `transaction_evidence_id`,
+                    `tevs`.`status` as `transaction_evidence_status`,
+                    `ss`.`status` as `shipping_status`,
+                    `ss`.`reserve_id` as `shipping_reserve_id`
+                FROM `items`
+                LEFT JOIN `transaction_evidences` `tevs`
+                ON `items`.`id` = `tevs`.`item_id`
+                LEFT JOIN `shippings` `ss`
+                ON `tevs`.`id` = `ss`.`transaction_evidence_id`
+                WHERE (`items`.`seller_id` = %s OR `items`.`buyer_id` = %s ) AND `items`.`status` IN (%s,%s,%s,%s,%s)
+                ORDER BY `items`.`created_at` DESC, `items`.`id` DESC LIMIT %s
+                """
                 c.execute(sql, [
                     user['id'],
                     user['id'],
@@ -515,40 +544,46 @@ def get_transactions():
                     Constants.TRANSACTIONS_PER_PAGE + 1,
                 ])
 
-            item_details = []
-            while True:
-                item = c.fetchone()
+            item_details = [
+                {
+                    **item,
+                    "category": get_category_by_id(item["category_id"]),
+                    "seller": None,
+                    "image_url": get_image_url(item["image_name"]),
+                }
+                for item in c.fetchall()
+            ]
+            for i, item in enumerate(item_details):
+                transaction_evidence_id = item['transaction_evidence_id']
+                if transaction_evidence_id is not None:
+                    if item['shipping_status'] is None:
+                        http_json_error(requests.codes['not_found'], "shipping not found")
 
-                if item is None:
-                    break
+                    ssr = api_shipment_status(get_shipment_service_url(), {"reserve_id": item["shipping_reserve_id"]})
+                    item["shipping_status"] = ssr["status"]
 
-                seller = get_user_simple_by_id(item["seller_id"])
-                category = get_category_by_id(item["category_id"])
+            sql = """
+            select * from `users`
+            where id in (%s)
+            """ % (','.join(['%s'] * len(item_details)))
 
-                item["category"] = category
-                item["seller"] = to_user_json(seller)
-                item["image_url"] = get_image_url(item["image_name"])
-                item = to_item_json(item, simple=False)
+            c.execute(sql, [x['seller_id'] for x in item_details])
+            users = {
+                int(user['id']): user
+                for user in c.fetchall()
+            }
+            for i, item in enumerate(item_details):
+                item_details[i]['seller'] = users.get(int(item['seller_id']))
+                if item_details[i]['seller'] is None:
+                    http_json_error(requests.codes['not_found'], "user not found")
+                if 'hashed_password' in item_details[i]['seller']:
+                    del item_details[i]['seller']['hashed_password']
+                if 'last_bump' in item_details[i]['seller']:
+                    del item_details[i]['seller']['last_bump']
+                if 'created_at' in item_details[i]['seller']:
+                    del item_details[i]['seller']['created_at']
+            item_details = [to_item_json(x, simple=False) for x in item_details]
 
-                item_details.append(item)
-
-                with conn.cursor() as c2:
-                    sql = "SELECT * FROM `transaction_evidences` WHERE `item_id` = %s"
-                    c2.execute(sql, [item['id']])
-                    transaction_evidence = c2.fetchone()
-
-
-                    if transaction_evidence:
-                        sql = "SELECT * FROM `shippings` WHERE `transaction_evidence_id` = %s"
-                        c2.execute(sql, [transaction_evidence["id"]])
-                        shipping = c2.fetchone()
-                        if not shipping:
-                            http_json_error(requests.codes['not_found'], "shipping not found")
-
-                        ssr = api_shipment_status(get_shipment_service_url(), {"reserve_id": shipping["reserve_id"]})
-                        item["transaction_evidence_id"] = transaction_evidence["id"]
-                        item["transaction_evidence_status"] = transaction_evidence["status"]
-                        item["shipping_status"] = ssr["status"]
 
         except MySQLdb.Error as err:
             app.logger.exception(err)
