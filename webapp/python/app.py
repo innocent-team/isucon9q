@@ -1357,8 +1357,8 @@ def get_index(*args, **kwargs):
 
 # Assets
 # @app.route("/*")
+from wsgi_lineprof.middleware import LineProfilerMiddleware
+app = LineProfilerMiddleware(app)
 
 if __name__ == "__main__":
-    from wsgi_lineprof.middleware import LineProfilerMiddleware
-    app = LineProfilerMiddleware(app)
     app.run(port=8000, debug=True, threaded=True)
