@@ -1228,10 +1228,6 @@ def post_bump():
             sql = "UPDATE `users` SET `last_bump`=%s WHERE id=%s"
             c.execute(sql, (now, user['id'],))
 
-            sql = "SELECT * FROM `items` WHERE `id` = %s"
-            c.execute(sql, (target_item['id'],))
-            target_item = c.fetchone()
-
         conn.commit()
     except MySQLdb.Error as err:
         app.logger.exception(err)
