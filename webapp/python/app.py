@@ -153,7 +153,12 @@ categories_id_map = {
 }
 
 def get_category_by_id(category_id):
-    return categories_id_map[int(category_id)]
+    category = categories_id_map[int(category_id)]
+    if category['parent_id'] != 0:
+        parent = get_category_by_id(category['parent_id'])
+        if parent is not None:
+            category['parent_category_name'] = parent['category_name']
+    return category
 
 def get_all_categories():
     return categories
@@ -1355,7 +1360,7 @@ filters = [
 ]
 f = open("/home/isucon/isucari/webapp/python/lineprof.log", "w")
 # Add wsgi_lineprof as a WSGI middleware
-app = LineProfilerMiddleware(app, filters=filters, stream=f, async_stream=True)
+lapp = LineProfilerMiddleware(app, filters=filters, stream=f, async_stream=True)
 
 if __name__ == "__main__":
     app.run(port=8000, debug=True, threaded=True)
