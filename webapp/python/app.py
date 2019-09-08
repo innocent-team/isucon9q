@@ -326,23 +326,15 @@ def get_new_items():
                     Constants.ITEMS_PER_PAGE + 1
                 ))
 
-            item_simples = []
-
-            while True:
-                item = c.fetchone()
-
-                if item is None:
-                    break
-
-                seller = get_user_simple_by_id(item["seller_id"])
-                category = get_category_by_id(item["category_id"])
-
-                item["category"] = category
-                item["seller"] = to_user_json(seller)
-                item["image_url"] = get_image_url(item["image_name"])
-                item = to_item_json(item, simple=True)
-
-                item_simples.append(item)
+            item_simples = [
+                to_item_json({
+                    **item,
+                    "category": get_category_by_id(item["category_id"]),
+                    "seller": to_user_json(get_user_simple_by_id(item["seller_id"])),
+                    "image_url": get_image_url(item["image_name"])
+                }, simple=True)
+                for item in c.fetchall()
+            ]
 
             has_next = False
             if len(item_simples) > Constants.ITEMS_PER_PAGE:
