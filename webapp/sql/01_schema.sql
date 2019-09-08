@@ -74,3 +74,4 @@ CREATE TABLE `categories` (
 ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4;
 
 create index items_seller_id on items (seller_id);
+create index items_created on items (created_at);
