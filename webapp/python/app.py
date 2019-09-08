@@ -1358,7 +1358,16 @@ def get_index(*args, **kwargs):
 # Assets
 # @app.route("/*")
 from wsgi_lineprof.middleware import LineProfilerMiddleware
-app = LineProfilerMiddleware(app)
+from wsgi_lineprof.filters import FilenameFilter, TotalTimeSorter
+filters = [
+    # Results which filename contains "app.py"
+    FilenameFilter("/home/isucon/isucari/webapp/python/app.py"),
+    # Sort by total time of results
+    TotalTimeSorter(),
+]
+f = open("/home/isucon/isucari/webapp/python/lineprof.log", "w")
+# Add wsgi_lineprof as a WSGI middleware
+app = LineProfilerMiddleware(app, filters=filters, stream=f, async_stream=True)
 
 if __name__ == "__main__":
     app.run(port=8000, debug=True, threaded=True)
