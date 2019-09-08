@@ -103,54 +103,45 @@ def random_string(length):
     return ''.join(random.choice(letters) for _ in range(length))
 
 
-def get_user():
-    user_id = flask.session.get("user_id")
-    if user_id is None:
-        http_json_error(requests.codes['not_found'], "no session")
+def user_key_mem(user_id):
+    return "user_"+user_id
+
+def get_user_on_mem(user_id):
+    cmem = mem()
+    user = cmem.get(user_key_mem(user_id))
+    if user:
+        return user # TODO: convert to py
     try:
         conn = dbh()
         with conn.cursor() as c:
             sql = "SELECT * FROM `users` WHERE `id` = %s"
             c.execute(sql, [user_id])
             user = c.fetchone()
-            if user is None:
-                http_json_error(requests.codes['not_found'], "user not found")
+            cmem.set(user_key_mem(user_id), user) # TODO: convert to mem
+            return user
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
-    return user
 
+def get_user():
+    user_id = flask.session.get("user_id")
+    if user_id is None:
+        http_json_error(requests.codes['not_found'], "no session")
+    user = get_user_on_mem(user_id)
+    if user is None:
+        http_json_error(requests.codes['not_found'], "user not found")
+    return user
 
 def get_user_or_none():
     user_id = flask.session.get("user_id")
     if user_id is None:
         return None
-    try:
-        conn = dbh()
-        with conn.cursor() as c:
-            sql = "SELECT * FROM `users` WHERE `id` = %s"
-            c.execute(sql, [user_id])
-            user = c.fetchone()
-            if user is None:
-                return None
-    except MySQLdb.Error as err:
-        app.logger.exception(err)
-        return None
-    return user
-
+    return get_user_on_mem(user_id)
 
 def get_user_simple_by_id(user_id):
-    try:
-        conn = dbh()
-        with conn.cursor() as c:
-            sql = "SELECT * FROM `users` WHERE `id` = %s"
-            c.execute(sql, [user_id])
-            user = c.fetchone()
-            if user is None:
-                http_json_error(requests.codes['not_found'], "user not found")
-    except MySQLdb.Error as err:
-        app.logger.exception(err)
-        http_json_error(requests.codes['internal_server_error'], "db error")
+    user = get_user_on_mem(user_id)
+    if user is None:
+        http_json_error(requests.codes['not_found'], "user not found")
     return user
 
 import category
@@ -282,6 +273,8 @@ def post_initialize():
             http_json_error(requests.codes['internal_server_error'], "db error")
 
     cmem = mem()
+    cmem.flash_all()
+    # TODO: make hot user cache
     cmem.set("payment_service_url", payment_service_url)
     cmem.set("shipment_service_url", shipment_service_url)
 
@@ -931,6 +924,9 @@ def post_sell():
                 seller['id'],
             ))
             conn.commit()
+            cmem = mem()
+            cmem.delete(user_key_mem(seller['id'])) # Purge user cache
+
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
@@ -1260,6 +1256,9 @@ def post_bump():
             target_item = c.fetchone()
 
         conn.commit()
+        cmem = mem()
+        cmem.delete(user_key_mem(user['id'])) # Purge user cache
+
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
