@@ -146,7 +146,8 @@ def get_user_simple_by_id(user_id):
         http_json_error(requests.codes['internal_server_error'], "db error")
     return user
 
-categories = [{'id': 1, 'parent_id': 0, 'category_name': 'ソファー'}, {'id': 2, 'parent_id': 1, 'category_name': '一人掛けソファー'}, {'id': 3, 'parent_id': 1, 'category_name': '二人掛 けソファー'}, {'id': 4, 'parent_id': 1, 'category_name': 'コーナーソファー'}, {'id': 5, 'parent_id': 1, 'category_name': '二段ソファー'}, {'id': 6, 'parent_id': 1, 'category_name': 'ソファーベッド'}, {'id': 10, 'parent_id': 0, 'category_name': '家庭用チェア'}, {'id': 11, 'parent_id': 10, 'category_name': 'スツール'}, {'id': 12, 'parent_id': 10, 'category_name': 'クッションスツール'}, {'id': 13, 'parent_id': 10, 'category_name': 'ダイニングチェア'}, {'id': 14, 'parent_id': 10, 'category_name': 'リビングチェア'}, {'id': 15, 'parent_id': 10, 'category_name': 'カウンターチェア'}, {'id': 20, 'parent_id': 0, 'category_name': 'キッズチェア'}, {'id': 21, 'parent_id': 20, 'category_name': '学習チェア'}, {'id': 22, 'parent_id': 20, 'category_name': 'ベビーソファ'}, {'id': 23, 'parent_id': 20, 'category_name': 'キッズハイチェア'}, {'id': 24, 'parent_id': 20, 'category_name': 'テーブルチェア'}, {'id': 30, 'parent_id': 0, 'category_name': 'オフィスチェア'}, {'id': 31, 'parent_id': 30, 'category_name': 'デスクチェア'}, {'id': 32, 'parent_id': 30, 'category_name': 'ビジネスチェア'}, {'id': 33, 'parent_id': 30, 'category_name': '回転チェア'}, {'id': 34, 'parent_id': 30, 'category_name': 'リクライニングチェア'}, {'id': 35, 'parent_id': 30, 'category_name': '投擲用椅子'}, {'id': 40, 'parent_id': 0, 'category_name': '折りたたみ椅子'}, {'id': 41, 'parent_id': 40, 'category_name': 'パイプ椅子'}, {'id': 42, 'parent_id': 40, 'category_name': '木製折りたたみ椅子'}, {'id': 43, 'parent_id': 40, 'category_name': 'キッチンチェア'}, {'id': 44, 'parent_id': 40, 'category_name': 'アウトドアチェア'}, {'id': 45, 'parent_id': 40, 'category_name': '作業椅子'}, {'id': 50, 'parent_id': 0, 'category_name': 'ベンチ'}, {'id': 51, 'parent_id': 50, 'category_name': '一人掛けベンチ'}, {'id': 52, 'parent_id': 50, 'category_name': ' 二人掛けベンチ'}, {'id': 53, 'parent_id': 50, 'category_name': 'アウトドア用ベンチ'}, {'id': 54, 'parent_id': 50, 'category_name': '収納付きベンチ'}, {'id': 55, 'parent_id': 50, 'category_name': '背もたれ付きベンチ'}, {'id': 56, 'parent_id': 50, 'category_name': 'ベンチマーク'}, {'id': 60, 'parent_id': 0, 'category_name': '座椅子'}, {'id': 61, 'parent_id': 60, 'category_name': '和風座椅 子'}, {'id': 62, 'parent_id': 60, 'category_name': '高座椅子'}, {'id': 63, 'parent_id': 60, 'category_name': 'ゲーミング座椅子'}, {'id': 64, 'parent_id': 60, 'category_name': 'ロッキングチェア'}, {'id': 65, 'parent_id': 60, 'category_name': '座布団'}, {'id': 66, 'parent_id': 60, 'category_name': '空気椅子'}]
+import category
+categories = category.categories
 categories_id_map = {
     category['id']: category for category in categories
 }
@@ -158,8 +159,16 @@ def get_all_categories():
     return categories
 
 def get_categories_by_root_category_id(root_category_id):
-    # TODO: 実装する
-    pass
+    """
+    sql = "SELECT id FROM `categories` WHERE parent_id=%s"
+    c.execute(sql, (
+        root_category_id,
+    ))
+    """
+    root_category_id = int(root_category_id)
+    ret = [x for x in categories if x['parent_id'] == root_category_id]
+    app.logger.debug(ret)
+    return ret
 
 def to_user_json(user):
     del (user['hashed_password'], user['last_bump'], user['created_at'])
@@ -369,16 +378,7 @@ def get_new_category_items(root_category_id=None):
     category_ids = []
     with conn.cursor() as c:
         try:
-            sql = "SELECT id FROM `categories` WHERE parent_id=%s"
-            c.execute(sql, (
-                root_category_id,
-            ))
-
-            while True:
-                category = c.fetchone()
-                if category is None:
-                    break
-                category_ids.append(category["id"])
+            category_ids = [x['id'] for x in get_categories_by_root_category_id(root_category_id)]
 
             if item_id > 0 and created_at > 0:
                 sql = "SELECT * FROM `items` WHERE `status` IN (%s,%s) AND category_id IN ("+ ",".join(["%s"]*len(category_ids))+ ") AND (`created_at` < %s OR (`created_at` < %s AND `id` < %s)) ORDER BY `created_at` DESC, `id` DESC LIMIT %s"
