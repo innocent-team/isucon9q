@@ -123,14 +123,14 @@ def get_user_on_mem(user_id):
     cmem = mem()
     user = cmem.get(user_key_mem(user_id))
     if user:
-        return user # TODO: convert to py
+        return user
     try:
         conn = dbh()
         with conn.cursor() as c:
             sql = "SELECT * FROM `users` WHERE `id` = %s"
             c.execute(sql, [user_id])
             user = c.fetchone()
-            cmem.set(user_key_mem(user_id), user) # TODO: convert to mem
+            cmem.set(user_key_mem(user_id), user)
             return user
     except MySQLdb.Error as err:
         app.logger.exception(err)
@@ -156,6 +156,34 @@ def get_user_simple_by_id(user_id):
     if user is None:
         http_json_error(requests.codes['not_found'], "user not found")
     return user
+
+def get_users_simple_by_ids(user_ids):
+    cmem = mem()
+    users = cmem.getmulti([get_user_on_mem(user_id) for user_is in user_ids])
+    unknowns = []
+
+    res = dict()
+    for (user_id, res) in users.keys():
+        if res is None:
+            unknowns.push(user_id)
+        else:
+            res.put(int(user['id']), user)
+
+    if len(unknowns) > 0:
+        conn = dbh() # TODO DB error
+        with conn.cursor() as c:
+            sql = """
+            select * from `users`
+            where id in (%s)
+            """ % (','.join(['%s'] * len(unknowns)))
+
+            c.execute(sql, [x['seller_id'] for x in item_details])
+            for user in c.fetchall():
+                if user is None:
+                    http_json_error(requests.codes['not_found'], "user not found")
+                res.put(int(user['id']), user)
+    return user
+
 
 import category
 categories = category.categories
