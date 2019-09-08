@@ -327,15 +327,36 @@ def get_new_items():
                 ))
 
             item_simples = [
-                to_item_json({
+                {
                     **item,
                     "category": get_category_by_id(item["category_id"]),
-                    "seller": to_user_json(get_user_simple_by_id(item["seller_id"])),
-                    "image_url": get_image_url(item["image_name"])
-                }, simple=True)
+                    "seller": None,
+                    "image_url": get_image_url(item["image_name"]),
+                }
                 for item in c.fetchall()
             ]
+            sql = """
+            select * from `users`
+            where id in (%s)
+            """ % (','.join(['%s'] * len(item_simples)))
 
+            c.execute(sql, [x['seller_id'] for x in item_simples])
+            users = {
+                int(user['id']): user
+                for user in c.fetchall()
+            }
+            for i, item in enumerate(item_simples):
+                item_simples[i]['seller'] = users.get(int(item['seller_id']))
+                if item_simples[i]['seller'] is None:
+                    http_json_error(requests.codes['not_found'], "user not found")
+                if 'hashed_password' in item_simples[i]['seller']:
+                    del item_simples[i]['seller']['hashed_password']
+                if 'last_bump' in item_simples[i]['seller']:
+                    del item_simples[i]['seller']['last_bump']
+                if 'created_at' in item_simples[i]['seller']:
+                    del item_simples[i]['seller']['created_at']
+
+            item_simples = [to_item_json(x, simple=True) for x in item_simples]
             has_next = False
             if len(item_simples) > Constants.ITEMS_PER_PAGE:
                 has_next = True
