@@ -66,7 +66,20 @@ class HttpException(Exception):
 def mem():
     if hasattr(flask.g, 'mem'):
         return flask.g.mem
-    flask.g.mem = MemClient(('127.0.0.1', 11211))
+
+    def serialize_json(key, value):
+        if type(value) == str:
+            return value, 1
+        return json.dumps(value), 2
+    
+    def deserialize_json(key, value, flags):
+        if flags == 1:
+            return value
+        if flags == 2:
+            return json.loads(value)
+        raise Exception("Unknown flags for value: {1}".format(flags))
+
+    flask.g.mem = MemClient(('127.0.0.1', 11211), serializer=serializer_json, deserializer=deserializer_json)
     return flask.g.mem
 
 def dbh():
@@ -103,55 +116,74 @@ def random_string(length):
     return ''.join(random.choice(letters) for _ in range(length))
 
 
-def get_user():
-    user_id = flask.session.get("user_id")
-    if user_id is None:
-        http_json_error(requests.codes['not_found'], "no session")
+def user_key_mem(user_id):
+    return "user_"+user_id
+
+def get_user_on_mem(user_id):
+    cmem = mem()
+    user = cmem.get(user_key_mem(user_id))
+    if user:
+        return user
     try:
         conn = dbh()
         with conn.cursor() as c:
             sql = "SELECT * FROM `users` WHERE `id` = %s"
             c.execute(sql, [user_id])
             user = c.fetchone()
-            if user is None:
-                http_json_error(requests.codes['not_found'], "user not found")
+            cmem.set(user_key_mem(user_id), user)
+            return user
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
-    return user
 
+def get_user():
+    user_id = flask.session.get("user_id")
+    if user_id is None:
+        http_json_error(requests.codes['not_found'], "no session")
+    user = get_user_on_mem(user_id)
+    if user is None:
+        http_json_error(requests.codes['not_found'], "user not found")
+    return user
 
 def get_user_or_none():
     user_id = flask.session.get("user_id")
     if user_id is None:
         return None
-    try:
-        conn = dbh()
-        with conn.cursor() as c:
-            sql = "SELECT * FROM `users` WHERE `id` = %s"
-            c.execute(sql, [user_id])
-            user = c.fetchone()
-            if user is None:
-                return None
-    except MySQLdb.Error as err:
-        app.logger.exception(err)
-        return None
-    return user
-
+    return get_user_on_mem(user_id)
 
 def get_user_simple_by_id(user_id):
-    try:
-        conn = dbh()
-        with conn.cursor() as c:
-            sql = "SELECT * FROM `users` WHERE `id` = %s"
-            c.execute(sql, [user_id])
-            user = c.fetchone()
-            if user is None:
-                http_json_error(requests.codes['not_found'], "user not found")
-    except MySQLdb.Error as err:
-        app.logger.exception(err)
-        http_json_error(requests.codes['internal_server_error'], "db error")
+    user = get_user_on_mem(user_id)
+    if user is None:
+        http_json_error(requests.codes['not_found'], "user not found")
     return user
+
+def get_users_simple_by_ids(user_ids):
+    cmem = mem()
+    users = cmem.getmulti([get_user_on_mem(user_id) for user_is in user_ids])
+    unknowns = []
+
+    res = dict()
+    for (user_id, res) in users.keys():
+        if res is None:
+            unknowns.push(user_id)
+        else:
+            res.put(int(user['id']), user)
+
+    if len(unknowns) > 0:
+        conn = dbh() # TODO DB error
+        with conn.cursor() as c:
+            sql = """
+            select * from `users`
+            where id in (%s)
+            """ % (','.join(['%s'] * len(unknowns)))
+
+            c.execute(sql, [x['seller_id'] for x in item_details])
+            for user in c.fetchall():
+                if user is None:
+                    http_json_error(requests.codes['not_found'], "user not found")
+                res.put(int(user['id']), user)
+    return user
+
 
 import category
 categories = category.categories
@@ -282,6 +314,8 @@ def post_initialize():
             http_json_error(requests.codes['internal_server_error'], "db error")
 
     cmem = mem()
+    cmem.flash_all()
+    # TODO: make hot user cache
     cmem.set("payment_service_url", payment_service_url)
     cmem.set("shipment_service_url", shipment_service_url)
 
@@ -966,6 +1000,9 @@ def post_sell():
                 seller['id'],
             ))
             conn.commit()
+            cmem = mem()
+            cmem.delete(user_key_mem(seller['id'])) # Purge user cache
+
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
@@ -1295,6 +1332,9 @@ def post_bump():
             target_item = c.fetchone()
 
         conn.commit()
+        cmem = mem()
+        cmem.delete(user_key_mem(user['id'])) # Purge user cache
+
     except MySQLdb.Error as err:
         app.logger.exception(err)
         http_json_error(requests.codes['internal_server_error'], "db error")
