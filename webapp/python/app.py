@@ -66,7 +66,20 @@ class HttpException(Exception):
 def mem():
     if hasattr(flask.g, 'mem'):
         return flask.g.mem
-    flask.g.mem = MemClient(('127.0.0.1', 11211))
+
+    def serialize_json(key, value):
+        if type(value) == str:
+            return value, 1
+        return json.dumps(value), 2
+    
+    def deserialize_json(key, value, flags):
+        if flags == 1:
+            return value
+        if flags == 2:
+            return json.loads(value)
+        raise Exception("Unknown flags for value: {1}".format(flags))
+
+    flask.g.mem = MemClient(('127.0.0.1', 11211), serializer=serializer_json, deserializer=deserializer_json)
     return flask.g.mem
 
 def dbh():
