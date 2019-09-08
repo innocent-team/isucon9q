@@ -72,3 +72,5 @@ CREATE TABLE `categories` (
   `parent_id` int unsigned NOT NULL,
   `category_name` varchar(191) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4;
+
+create index items_seller_id on items (seller_id);
