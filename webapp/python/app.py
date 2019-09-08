@@ -179,7 +179,6 @@ def get_categories_by_root_category_id(root_category_id):
     """
     root_category_id = int(root_category_id)
     ret = [x for x in categories if x['parent_id'] == root_category_id]
-    app.logger.debug(ret)
     return ret
 
 def to_user_json(user):
@@ -240,11 +239,12 @@ def api_shipment_status(shipment_url, params={}):
             shipment_url + "/status",
             headers=dict(Authorization=Constants.ISUCARI_API_TOKEN),
             json=params,
+            timeout=8,
         )
         res.raise_for_status()
     except (socket.gaierror, requests.HTTPError) as err:
         app.logger.exception(err)
-        http_json_error(requests.codes['internal_server_error'])
+        http_json_error(requests.codes['internal_server_error'], msg='api_shipment_status')
 
     return res.json()
 
@@ -286,7 +286,7 @@ def post_initialize():
     cmem.set("shipment_service_url", shipment_service_url)
 
     return flask.jsonify({
-        "campaign": 4,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
+        "campaign": 1,  # キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
         "language": "python" # 実装言語を返す
     })
 
